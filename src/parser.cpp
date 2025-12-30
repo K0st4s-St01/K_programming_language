@@ -1,4 +1,5 @@
 #include "../headers/parser/parser.hpp"
+#include <algorithm>
 #include <exception>
 #include <fstream>
 #include <iostream>
@@ -432,8 +433,9 @@ ExprPtr Parser::parseUnary(){
     }
     return parseCall(parsePrimary());
 }
-ExprPtr Parser::parseCall(ExprPtr callee) {
+ExprPtr Parser::parseCall(ExprPtr expr) {
     while (true) {
+        // Function call
         if (match(TokenType::LParen)) {
             std::vector<ExprPtr> args;
 
@@ -445,20 +447,36 @@ ExprPtr Parser::parseCall(ExprPtr callee) {
 
             consume(TokenType::RParen, "Expected ')' after arguments");
 
-            callee = std::make_unique<CallExpr>(
-                std::move(callee),
+            expr = std::make_unique<CallExpr>(
+                std::move(expr),
                 std::move(args),
                 previousToken.location,
-                TypeInfo{"not_yet",0}
+                TypeInfo{"unknown",0}
             );
-        } else {
+        }
+        // Member access
+        else if (match(TokenType::Dot)) {
+            Token name =
+                consume(TokenType::Identifier, "Expected member name");
+
+            expr = std::make_unique<MemberAccessExpr>(
+                std::move(expr),
+                name.lexeme,
+                name.location
+            );
+        }
+        else {
             break;
         }
     }
-    return callee;
+
+    return expr;
 }
 ExprPtr Parser::parsePrimary() {
     Token tok = currentToken;
+    if (match(TokenType::This)) {
+        return std::make_unique<ThisExpr>(previousToken.location);
+    }
 
     if (match(TokenType::IntLiteral)) {
         return std::make_unique<IntLiteralExpr>(
@@ -502,3 +520,98 @@ ExprPtr Parser::parsePrimary() {
     return nullptr;
 }
 
+std::unique_ptr<Stmt> Parser::parseIf() {
+    auto loc = previousToken.location; // 'if' token
+    auto condition = parseExpression();
+    auto thenBranch = parseBlock();
+
+    // parse optional elifs
+    std::vector<ElifClause> elifClauses;
+    while (match(TokenType::Elif)) {
+        auto elifCond = parseExpression();
+        auto elifBody = parseBlock();
+        elifClauses.push_back({std::move(elifCond), std::move(elifBody)});
+    }
+
+    // parse optional else
+    StmtPtr elseBranch = nullptr;
+    if (match(TokenType::Else)) {
+        elseBranch = parseBlock();
+    }
+     return std::make_unique<IfStmt>(
+        std::move(condition),
+        std::move(thenBranch),
+        std::move(elseBranch),
+        std::move(elifClauses),
+        loc
+    );
+}
+std::unique_ptr<Stmt> Parser::parseWhile() {
+    auto loc = previousToken.location;
+    auto condition = parseExpression();
+    auto body = parseBlock();
+    return std::make_unique<WhileStmt>(std::move(condition), std::move(body), loc);
+}
+std::unique_ptr<Stmt> Parser::parseFor() {
+    auto loc = previousToken.location;
+
+    consume(TokenType::LParen, "Expected '(' after 'for'");
+
+    // optional initializer
+    StmtPtr init = nullptr;
+    if (!check(TokenType::Semicolon)) {
+        if (isType(currentToken))
+            init = parseVarDecl();
+        else
+            init = parseExpressionStmt();
+    }
+    consume(TokenType::Semicolon, "Expected ';' after for-loop initializer");
+
+    // optional condition
+    ExprPtr condition = nullptr;
+    if (!check(TokenType::Semicolon)) {
+        condition = parseExpression();
+    }
+    consume(TokenType::Semicolon, "Expected ';' after for-loop condition");
+
+    // optional increment
+    ExprPtr increment = nullptr;
+    if (!check(TokenType::RParen)) {
+        increment = parseExpression();
+    }
+    consume(TokenType::RParen, "Expected ')' after for-loop increment");
+
+    auto body = parseBlock();
+
+    return std::make_unique<ForStmt>(
+        std::move(init),
+        std::move(condition),
+        std::move(increment),
+        std::move(body),
+        loc
+    );
+}
+std::unique_ptr<Stmt> Parser::parseReturn() {
+    auto loc = previousToken.location;
+    ExprPtr value = nullptr;
+
+    if (!check(TokenType::Semicolon)) {
+        value = parseExpression();
+    }
+    consume(TokenType::Semicolon, "Expected ';' after return statement");
+
+    return std::make_unique<ReturnStmt>(std::move(value), loc);
+}
+std::unique_ptr<Stmt> Parser::parseVarDecl() {
+    auto loc = currentToken.location;
+    TypeInfo type = parseType();
+    std::string name = consume(TokenType::Identifier, "Expected variable name").lexeme;
+
+    ExprPtr initializer = nullptr;
+    if (match(TokenType::Assign)) {
+        initializer = parseExpression();
+    }
+
+    consume(TokenType::Semicolon, "Expected ';' after variable declaration");
+    return std::make_unique<VarDeclStmt>(type.name,type.pointerDepth, name, std::move(initializer), loc);
+}

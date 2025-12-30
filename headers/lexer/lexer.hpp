@@ -11,12 +11,13 @@ enum class TokenType{
 
   Identifier,
   I16,I32,I64,
-  F16,F32,F64,
+  F32,F64,
   Char,Boolean,Void,
 
   IntLiteral,FloatLiteral,CharLiteral,StringLiteral,
 
-  Struct,Module,Include,Return,
+  Struct,This,
+  Module,Include,Return,
   If,Elif,Else,
   While,For,
 
@@ -79,7 +80,6 @@ inline std::unordered_map<std::string, TokenType> keywords = {
     {"i16",TokenType::I16},
     {"i32",TokenType::I32},
     {"i64",TokenType::I64},
-    {"f16",TokenType::F16},
     {"f32",TokenType::F32},
     {"f64",TokenType::F64},
     {"char",TokenType::Char},
@@ -90,6 +90,8 @@ inline std::unordered_map<std::string, TokenType> keywords = {
     {"while",TokenType::While},
     {"for",TokenType::For},
     {"elif",TokenType::Elif},
+    {"this", TokenType::This}
+
 };
 
 #endif

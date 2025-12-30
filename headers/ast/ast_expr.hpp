@@ -113,5 +113,19 @@ struct AssignExpr : Expr {
     AssignExpr(std::unique_ptr<Expr> tgt, std::unique_ptr<Expr> val, SourceLocation loc)
         : Expr(loc, tgt->type), target(std::move(tgt)), value(std::move(val)) {}
 };
+struct MemberAccessExpr : Expr {
+    ExprPtr object;
+    std::string member;
+
+    MemberAccessExpr(ExprPtr object,
+                     std::string member,
+                     SourceLocation loc)
+        : Expr(loc, {"unknown", 0}),
+          object(std::move(object)),
+          member(std::move(member)) {}
+};
+struct ThisExpr : Expr {
+    ThisExpr(SourceLocation loc) : Expr(loc, {"unknown", 0}) {}
+};
 
 #endif

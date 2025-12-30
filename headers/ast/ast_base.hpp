@@ -13,7 +13,31 @@ struct ASTNode{
 struct TypeInfo{
     std::string name;
     int pointerDepth = 0;
+     bool operator==(const TypeInfo& other) const {
+        return name == other.name && pointerDepth == other.pointerDepth;
+    }
+
+    bool isPointer() const {
+        return pointerDepth > 0;
+    }
+    bool empty() const{
+        return name.empty();
+    }
 };
+enum class SymbolKind {
+    Variable,
+    Function,
+    Struct,
+    Field,
+    Parameter
+};
+
+struct Symbol {
+    SymbolKind kind;
+    TypeInfo type;
+    ASTNode* node; // points to decl
+};
+
 
 struct Expr : ASTNode{
     TypeInfo type;

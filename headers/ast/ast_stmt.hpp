@@ -2,6 +2,8 @@
 #define STMT_H
 
 #include "ast_base.hpp"
+#include <memory>
+#include <utility>
 #include <vector>
 
 // =======================
@@ -61,20 +63,35 @@ struct BlockStmt : Stmt {
 // =======================
 // If Statement
 // =======================
-
+struct ElifClause {
+    ExprPtr condition;
+    StmtPtr body;
+};
 struct IfStmt : Stmt {
     ExprPtr condition;
     StmtPtr thenBranch;
+    std::vector<ElifClause> elifClauses;
     StmtPtr elseBranch; // may be null
 
+    // IfStmt(ExprPtr cond,
+    //        StmtPtr thenB,
+    //        StmtPtr elseB,
+    //        SourceLocation loc)
+    //     : Stmt(loc),
+    //       condition(std::move(cond)),
+    //       thenBranch(std::move(thenB)),
+    //       elseBranch(std::move(elseB)) {}
     IfStmt(ExprPtr cond,
            StmtPtr thenB,
            StmtPtr elseB,
+           std::vector<ElifClause> elifClauses,
            SourceLocation loc)
         : Stmt(loc),
           condition(std::move(cond)),
           thenBranch(std::move(thenB)),
-          elseBranch(std::move(elseB)) {}
+          elseBranch(std::move(elseB)),
+          elifClauses(std::move(elifClauses)) {}
+
 };
 
 // =======================
@@ -94,6 +111,8 @@ struct ForStmt : Stmt {
     std::unique_ptr<Stmt> initializer;   // e.g., var declaration or assignment
     std::unique_ptr<Expr> condition;     // loop condition
     std::unique_ptr<Expr> increment;     // e.g., i = i + 1
-    std::unique_ptr<Stmt> body;          // loop body
+    std::unique_ptr<Stmt> body;  
+    ForStmt(StmtPtr init,ExprPtr cond,ExprPtr increment,StmtPtr body,SourceLocation loc)
+    :initializer(std::move(init)),condition(std::move(cond)),increment(std::move(increment)),body(std::move(body)),Stmt(loc){}
 };
 #endif
