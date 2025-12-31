@@ -1,5 +1,5 @@
 # K_programming_language
-Copyright © 2025 Your Name
+Copyright © 2025 Konstantinos Stoiloudis
 
 All rights reserved.
 
