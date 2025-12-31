@@ -17,7 +17,8 @@ enum class TokenType{
   IntLiteral,FloatLiteral,CharLiteral,StringLiteral,
 
   Struct,This,
-  Module,Include,Return,
+  Module,Include
+  ,Return,Break,Continue,
   If,Elif,Else,
   While,For,
 
@@ -90,8 +91,11 @@ inline std::unordered_map<std::string, TokenType> keywords = {
     {"while",TokenType::While},
     {"for",TokenType::For},
     {"elif",TokenType::Elif},
-    {"this", TokenType::This}
+    {"this", TokenType::This},
+    {"break", TokenType::Break},
+    {"continue", TokenType::Continue},
 
 };
+
 
 #endif

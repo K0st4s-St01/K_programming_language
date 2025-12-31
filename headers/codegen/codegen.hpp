@@ -33,6 +33,11 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+struct LoopContext {
+    llvm::BasicBlock* breakBB;
+    llvm::BasicBlock* continueBB;
+};
+
 
 class CodeGen {
 public:
@@ -51,6 +56,10 @@ private:
     llvm::Value* createAlloca(llvm::Function*, llvm::Type*, const std::string&);
     llvm::Value* generateUnary(UnaryExpr*);
     llvm::Value* generateCall(CallExpr*);
+    llvm::Value* generateWhile(WhileStmt* w);
+    llvm::Value* generateFor(ForStmt* f);
+    llvm::Value* generateLogicalAnd(BinaryExpr* bin);
+    llvm::Value* generateLogicalOr(BinaryExpr* bin);
     void pushScope();
     void popScope();
 
@@ -85,6 +94,7 @@ private:
         std::string,
         std::unordered_map<std::string, unsigned>
     > structFieldIndex;
+    std::vector<LoopContext> loopStack;
 };
 
 

@@ -237,7 +237,9 @@ void SemanticAnalyzer::analyzeStmt(Stmt* stmt) {
         if (condType.name != "bool")
             error("While condition must be boolean", wh->condition->loc);
 
+        loopDepth++;
         analyzeStmt(wh->body.get());
+        loopDepth--;
     }
 
     // ---------- For ----------
@@ -253,12 +255,23 @@ void SemanticAnalyzer::analyzeStmt(Stmt* stmt) {
                 error("For loop condition must be boolean", fr->condition->loc);
         }
 
+        loopDepth++;
         analyzeStmt(fr->body.get());
+        loopDepth--;
 
         if (fr->increment)
             analyzeExpr(fr->increment.get());
 
         popScope();
+    }
+    else if (dynamic_cast<BreakStmt*>(stmt)) {
+        if (loopDepth == 0)
+            error("'break' outside loop", stmt->loc);
+    }
+
+    else if (dynamic_cast<ContinueStmt*>(stmt)) {
+        if (loopDepth == 0)
+            error("'continue' outside loop", stmt->loc);
     }
 
     // ---------- Variable Declaration ----------

@@ -13,6 +13,8 @@ public:
 
 private:
     Program* program;
+    int loopDepth = 0;
+
 
     Module* currentModule = nullptr;
     StructDecl* currentStruct = nullptr;

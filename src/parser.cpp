@@ -75,7 +75,6 @@ bool Parser::isType(const Token& tok) {
         case TokenType::I16:
         case TokenType::I32:
         case TokenType::I64:
-        case TokenType::F16:
         case TokenType::F32:
         case TokenType::F64:
         case TokenType::Char:
@@ -271,6 +270,11 @@ StmtPtr Parser::parseStatement() {
     if (match(TokenType::For))    return parseFor();
     if (match(TokenType::Return)) return parseReturn();
     if (match(TokenType::LBrace)) return parseBlock();
+    if (match(TokenType::Break))
+        return parseBreak();
+
+    if (match(TokenType::Continue))
+        return parseContinue();
 
     if (isType(currentToken)) return parseVarDecl();
 

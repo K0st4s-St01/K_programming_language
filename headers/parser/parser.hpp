@@ -32,6 +32,8 @@ class Parser{
         std::unique_ptr<Stmt> parseFor();
         std::unique_ptr<Stmt> parseReturn();
         std::unique_ptr<Stmt> parseVarDecl();
+        StmtPtr parseBreak();
+        StmtPtr parseContinue();
         StmtPtr parseExpressionStmt();
 
         ExprPtr parseExpression();

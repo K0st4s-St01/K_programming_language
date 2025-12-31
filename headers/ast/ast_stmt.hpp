@@ -115,4 +115,12 @@ struct ForStmt : Stmt {
     ForStmt(StmtPtr init,ExprPtr cond,ExprPtr increment,StmtPtr body,SourceLocation loc)
     :initializer(std::move(init)),condition(std::move(cond)),increment(std::move(increment)),body(std::move(body)),Stmt(loc){}
 };
+struct BreakStmt : Stmt {
+    BreakStmt(SourceLocation loc):Stmt(loc){}
+};
+
+struct ContinueStmt : Stmt {
+    ContinueStmt(SourceLocation loc):Stmt(loc){}
+};
+
 #endif

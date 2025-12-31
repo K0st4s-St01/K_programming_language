@@ -65,6 +65,7 @@ void CodeGen::defineStruct(StructDecl* s) {
 }
 
 llvm::Function* CodeGen::generateFunction(FunctionDecl* f) {
+    
     std::vector<llvm::Type*> paramTypes;
     for (auto& p : f->params)
         paramTypes.push_back(getLLVMType(p.t));
@@ -123,12 +124,38 @@ llvm::Function* CodeGen::generateFunction(FunctionDecl* f) {
     return function;
 }
 llvm::Value* CodeGen::generateStmt(Stmt* stmt) {
+    if (auto f = dynamic_cast<ForStmt*>(stmt))
+        return generateFor(f);
+
+    if (auto w = dynamic_cast<WhileStmt*>(stmt))
+        return generateWhile(w);
+
     if (auto block = dynamic_cast<BlockStmt*>(stmt)) {
+        pushScope();
         llvm::Value* last = nullptr;
         for (auto& s : block->statements)
             last = generateStmt(s.get());
+        popScope();
         return last;
     }
+    if (dynamic_cast<BreakStmt*>(stmt)) {
+    if (loopStack.empty()) {
+        error("'break' outside loop", stmt->loc);
+        return nullptr;
+    }
+    builder->CreateBr(loopStack.back().breakBB);
+    return nullptr;
+}
+
+if (dynamic_cast<ContinueStmt*>(stmt)) {
+    if (loopStack.empty()) {
+        error("'continue' outside loop", stmt->loc);
+        return nullptr;
+    }
+    builder->CreateBr(loopStack.back().continueBB);
+    return nullptr;
+}
+
     if (auto v = dynamic_cast<VarDeclStmt*>(stmt)) {
     llvm::Type* ty = getLLVMType({v->typeName, v->pointerDepth});
 
@@ -269,9 +296,9 @@ llvm::Value* CodeGen::generateBinary(BinaryExpr* bin) {
 
         // Logical (booleans)
         case BinaryOp::And:
-            return builder->CreateAnd(lhs, rhs, "andtmp");
+            return generateLogicalAnd(bin);
         case BinaryOp::Or:
-            return builder->CreateOr(lhs, rhs, "ortmp");
+            return generateLogicalOr(bin);
         case BinaryOp::Xor:
             return builder->CreateXor(lhs, rhs, "xortmp");
 
@@ -425,8 +452,229 @@ llvm::Type* CodeGen::getLLVMType(TypeInfo t) {
 
     // ---------- pointers ----------
     for (int i = 0; i < t.pointerDepth; i++) {
-        base = llvm::PointerType::get(context, 0); // opaque pointer
+        base = llvm::PointerType::getUnqual(context);
     }
 
     return base;
+}
+llvm::Value* CodeGen::generateCall(CallExpr* call) {
+
+    // METHOD CALL
+    if (auto mem = dynamic_cast<MemberAccessExpr*>(call->callee.get())) {
+
+        llvm::Value* thisPtr = generateExpr(mem->object.get());
+
+        std::string mangled =
+            mem->object->type.name + "_" + mem->member;
+
+        llvm::Function* callee =
+            module->getFunction(mangled);
+
+        if (!callee) {
+            error("Unknown method: " + mem->member, call->loc);
+            return nullptr;
+        }
+
+        std::vector<llvm::Value*> args;
+        args.push_back(thisPtr); // 🔑 implicit this
+
+        for (auto& a : call->arguments)
+            args.push_back(generateExpr(a.get()));
+
+        return builder->CreateCall(callee, args);
+    }
+
+    // NORMAL FUNCTION
+    auto id = dynamic_cast<IdentifierExpr*>(call->callee.get());
+    if (!id) {
+        error("Call target is not callable", call->loc);
+        return nullptr;
+    }
+
+    llvm::Function* callee = module->getFunction(id->name);
+    if (!callee) {
+        error("Unknown function: " + id->name, call->loc);
+        return nullptr;
+    }
+
+    std::vector<llvm::Value*> args;
+    for (auto& arg : call->arguments)
+        args.push_back(generateExpr(arg.get()));
+
+    return builder->CreateCall(callee, args);
+}
+
+llvm::Value* CodeGen::generateWhile(WhileStmt* w) {
+    llvm::Function* fn = currentFunction;
+
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "while.cond", fn);
+    llvm::BasicBlock* bodyBB =
+        llvm::BasicBlock::Create(context, "while.body", fn);
+    llvm::BasicBlock* endBB =
+        llvm::BasicBlock::Create(context, "while.end", fn);
+
+    // initial jump
+    builder->CreateBr(condBB);
+
+    // condition
+    builder->SetInsertPoint(condBB);
+    llvm::Value* cond = generateExpr(w->condition.get());
+    cond = builder->CreateICmpNE(
+        cond,
+        llvm::ConstantInt::get(cond->getType(), 0)
+    );
+    builder->CreateCondBr(cond, bodyBB, endBB);
+
+    // push loop context
+    loopStack.push_back({
+        endBB,   // break
+        condBB  // continue
+    });
+
+    // body
+    builder->SetInsertPoint(bodyBB);
+    pushScope();
+    generateStmt(w->body.get());
+    popScope();
+
+    if (!builder->GetInsertBlock()->getTerminator())
+        builder->CreateBr(condBB);
+
+    loopStack.pop_back();
+
+    builder->SetInsertPoint(endBB);
+    return nullptr;
+}
+
+llvm::Value* CodeGen::generateFor(ForStmt* f) {
+    llvm::Function* fn = currentFunction;
+
+    pushScope();
+
+    if (f->initializer)
+        generateStmt(f->initializer.get());
+
+    llvm::BasicBlock* condBB =
+        llvm::BasicBlock::Create(context, "for.cond", fn);
+    llvm::BasicBlock* bodyBB =
+        llvm::BasicBlock::Create(context, "for.body", fn);
+    llvm::BasicBlock* incBB =
+        llvm::BasicBlock::Create(context, "for.inc", fn);
+    llvm::BasicBlock* endBB =
+        llvm::BasicBlock::Create(context, "for.end", fn);
+
+    builder->CreateBr(condBB);
+
+    // condition
+    builder->SetInsertPoint(condBB);
+    llvm::Value* cond = generateExpr(f->condition.get());
+    cond = builder->CreateICmpNE(
+        cond,
+        llvm::ConstantInt::get(cond->getType(), 0)
+    );
+    builder->CreateCondBr(cond, bodyBB, endBB);
+
+    // push loop context
+    loopStack.push_back({
+        endBB, // break
+        incBB  // continue
+    });
+
+    // body
+    builder->SetInsertPoint(bodyBB);
+    generateStmt(f->body.get());
+    if (!builder->GetInsertBlock()->getTerminator())
+        builder->CreateBr(incBB);
+
+    // increment
+    builder->SetInsertPoint(incBB);
+    generateExpr(f->increment.get());
+    builder->CreateBr(condBB);
+
+    loopStack.pop_back();
+    popScope();
+
+    builder->SetInsertPoint(endBB);
+    return nullptr;
+}
+llvm::Value* CodeGen::generateLogicalAnd(BinaryExpr* bin) {
+    llvm::Function* fn = currentFunction;
+
+    llvm::BasicBlock* lhsTrueBB =
+        llvm::BasicBlock::Create(context, "and.lhs.true", fn);
+    llvm::BasicBlock* mergeBB =
+        llvm::BasicBlock::Create(context, "and.merge", fn);
+
+    llvm::BasicBlock* lhsBB = builder->GetInsertBlock();
+
+    llvm::Value* lhs = generateExpr(bin->lhs.get());
+    lhs = builder->CreateICmpNE(
+        lhs,
+        llvm::ConstantInt::get(lhs->getType(), 0)
+    );
+
+    builder->CreateCondBr(lhs, lhsTrueBB, mergeBB);
+
+    // RHS
+    builder->SetInsertPoint(lhsTrueBB);
+    llvm::Value* rhs = generateExpr(bin->rhs.get());
+    rhs = builder->CreateICmpNE(
+        rhs,
+        llvm::ConstantInt::get(rhs->getType(), 0)
+    );
+    builder->CreateBr(mergeBB);
+
+    // Merge
+    builder->SetInsertPoint(mergeBB);
+    llvm::PHINode* phi =
+        builder->CreatePHI(llvm::Type::getInt1Ty(context), 2);
+
+    phi->addIncoming(
+        llvm::ConstantInt::getFalse(context),
+        lhsBB
+    );
+    phi->addIncoming(rhs, lhsTrueBB);
+
+    return phi;
+}
+llvm::Value* CodeGen::generateLogicalOr(BinaryExpr* bin) {
+    llvm::Function* fn = currentFunction;
+
+    llvm::BasicBlock* lhsFalseBB =
+        llvm::BasicBlock::Create(context, "or.lhs.false", fn);
+    llvm::BasicBlock* mergeBB =
+        llvm::BasicBlock::Create(context, "or.merge", fn);
+
+    llvm::BasicBlock* lhsBB = builder->GetInsertBlock();
+
+    llvm::Value* lhs = generateExpr(bin->lhs.get());
+    lhs = builder->CreateICmpNE(
+        lhs,
+        llvm::ConstantInt::get(lhs->getType(), 0)
+    );
+
+    builder->CreateCondBr(lhs, mergeBB, lhsFalseBB);
+
+    // RHS
+    builder->SetInsertPoint(lhsFalseBB);
+    llvm::Value* rhs = generateExpr(bin->rhs.get());
+    rhs = builder->CreateICmpNE(
+        rhs,
+        llvm::ConstantInt::get(rhs->getType(), 0)
+    );
+    builder->CreateBr(mergeBB);
+
+    // Merge
+    builder->SetInsertPoint(mergeBB);
+    llvm::PHINode* phi =
+        builder->CreatePHI(llvm::Type::getInt1Ty(context), 2);
+
+    phi->addIncoming(
+        llvm::ConstantInt::getTrue(context),
+        lhsBB
+    );
+    phi->addIncoming(rhs, lhsFalseBB);
+
+    return phi;
 }
